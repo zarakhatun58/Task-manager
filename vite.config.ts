@@ -4,11 +4,14 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  plugins: [react()],
+  
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: true,   // ✅ FIX: allow Render host
   },
-  
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
