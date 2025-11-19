@@ -1,15 +1,29 @@
 import Team from "../models/teamModel.js";
 
 export const createTeam = async (req, res) => {
-  const team = await Team.create({
-    userId: req.user,
-    name: req.body.name,
-    members: req.body.members
-  });
-  res.json(team);
+  try {
+    const { name, members } = req.body;
+
+    if (!name)
+      return res.status(400).json({ message: "Team name is required" });
+
+    const team = await Team.create({
+      userId: req.user,
+      name,
+      members: members || []
+    });
+
+    res.status(201).json(team);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
 };
 
 export const getTeams = async (req, res) => {
-  const teams = await Team.find({ userId: req.user });
-  res.json(teams);
+  try {
+    const teams = await Team.find({ userId: req.user });
+    res.json(teams);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
 };
