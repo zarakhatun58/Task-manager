@@ -10,9 +10,10 @@ import { Plus, FolderKanban, Trash2, Edit } from 'lucide-react';
 import { Project } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import './Projects.css';
+import { createProjectAPI } from '@/services/projectService';
 
 const Projects: React.FC = () => {
-  const { projects, teams, tasks, addProject, updateProject, deleteProject, currentUser } = useApp();
+  const { projects, teams,tasks, addProject, updateProject, deleteProject, currentUser } = useApp();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectName, setProjectName] = useState('');
@@ -26,39 +27,45 @@ const Projects: React.FC = () => {
     setEditingProject(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!projectName || !selectedTeamId) {
-      toast({
-        title: "Invalid Project",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!projectName || !selectedTeamId) {
+    toast({
+      title: "Invalid Project",
+      description: "Please fill in all required fields",
+      variant: "destructive",
+    });
+    return;
+  }
 
+  try {
     if (editingProject) {
-      updateProject(editingProject.id, {
-        ...editingProject,
-        name: projectName,
-        description,
-        teamId: selectedTeamId,
-      });
+  const updatedProject: Project = {
+    ...editingProject,
+    name: projectName,
+    description,
+    teamId: selectedTeamId,
+  };
+   await updateProject(editingProject._id, updatedProject);
+
       toast({
         title: "Project Updated",
         description: `${projectName} has been updated successfully`,
       });
+      // Update in local state
+      // addProject or updateProject in your app context should handle this
     } else {
-      const newProject: Project = {
-        id: `project-${Date.now()}`,
+      // Create project
+      const createdProject: Project = await createProjectAPI({
         name: projectName,
         description,
         teamId: selectedTeamId,
-        createdBy: currentUser?.id || '',
-        createdAt: new Date(),
-      };
-      addProject(newProject);
+      });
+
+      // Ensure createdProject has _id, createdBy, createdAt
+      addProject(createdProject);
+
       toast({
         title: "Project Created",
         description: `${projectName} has been created successfully`,
@@ -67,7 +74,18 @@ const Projects: React.FC = () => {
 
     setIsDialogOpen(false);
     resetForm();
-  };
+  } catch (err) {
+    toast({
+      title: "Error",
+      description: "Failed to save project",
+      variant: "destructive",
+    });
+    console.error(err);
+  }
+};
+
+
+
 
   const handleEdit = (project: Project) => {
     setEditingProject(project);
@@ -77,14 +95,21 @@ const Projects: React.FC = () => {
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (projectId: string) => {
-    deleteProject(projectId);
-    toast({
-      title: "Project Deleted",
-      description: "Project and all associated tasks have been deleted",
-    });
+  const handleDelete = async (projectId: string) => {
+    try {
+      await deleteProject(projectId);
+      toast({
+        title: "Project Deleted",
+        description: "Project and all associated tasks have been deleted",
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to delete project",
+        variant: "destructive",
+      });
+    }
   };
-
   return (
     <div className="projects-page">
       <div className="page-header">
@@ -137,7 +162,7 @@ const Projects: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {teams.map(team => (
-                      <SelectItem key={team.id} value={team.id}>
+                      <SelectItem key={team._id} value={team._id}>
                         {team.name}
                       </SelectItem>
                     ))}
@@ -155,12 +180,12 @@ const Projects: React.FC = () => {
 
       <div className="projects-grid">
         {projects.map(project => {
-          const team = teams.find(t => t.id === project.teamId);
-          const projectTasks = tasks.filter(t => t.projectId === project.id);
-          const completedTasks = projectTasks.filter(t => t.status === 'Done').length;
+          const team = teams.find(t => t._id === project.teamId);
+          const projectTasks = tasks.filter((t:any) => t.projectId === project._id);
+          const completedTasks = projectTasks.filter((t:any) => t.status === 'Done').length;
           
           return (
-            <div key={project.id} className="project-card">
+            <div key={project._id} className="project-card">
               <div className="project-card-header">
                 <div className="project-icon">
                   <FolderKanban size={24} />
@@ -173,7 +198,7 @@ const Projects: React.FC = () => {
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(project)}>
                     <Edit size={16} />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(project.id)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(project._id)}>
                     <Trash2 size={16} />
                   </Button>
                 </div>

@@ -6,6 +6,7 @@ export interface User {
 }
 
 export interface TeamMember {
+    _id?: string;
   id: string;
   name: string;
   role: string;
@@ -14,11 +15,14 @@ export interface TeamMember {
 }
 
 export interface Team {
-  id: string;
+  _id: string;  
   name: string;
-  members: TeamMember[];
-  createdBy: string;
+   members: any[];
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
 
 export interface Task {
   id: string;
@@ -32,7 +36,7 @@ export interface Task {
 }
 
 export interface Project {
-  id: string;
+   _id: string;    
   name: string;
   description: string;
   teamId: string;

@@ -1,17 +1,22 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { User, Team, TeamMember, Project, Task, ActivityLog } from '@/types';
-import { sampleUsers, sampleTeams, sampleProjects, sampleTasks } from '@/data/sampleData';
+import { sampleUsers, } from '@/data/sampleData';
+import { loginUser, registerUser } from '@/services/authService';
+import { createTeamAPI, deleteTeamAPI, fetchTeams, updateTeamAPI } from '@/services/teamService';
+import { createProjectAPI, deleteProjectAPI, fetchProjects, updateProjectAPI } from '@/services/projectService';
+import { fetchTasks } from '@/services/taskService';
 
 interface AppContextType {
   currentUser: User | null;
-  users: User[];
+   users: User[];
   teams: Team[];
   projects: Project[];
   tasks: Task[];
   activityLogs: ActivityLog[];
-  login: (email: string, password: string) => boolean;
+ login: (email: string, password: string) => Promise<boolean>;
+register: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  register: (name: string, email: string, password: string) => boolean;
+  setTeams: React.Dispatch<React.SetStateAction<Team[]>>
   addTeam: (team: Team) => void;
   updateTeam: (teamId: string, updatedTeam: Team) => void;
   deleteTeam: (teamId: string) => void;
@@ -32,114 +37,194 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>(sampleUsers);
-  const [teams, setTeams] = useState<Team[]>(sampleTeams);
-  const [projects, setProjects] = useState<Project[]>(sampleProjects);
-  const [tasks, setTasks] = useState<Task[]>(sampleTasks);
+  // const [teams, setTeams] = useState<Team[]>(sampleTeams);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+ const [tasks, setTasks] = useState<Task[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
   // Auto-login first user for demo
+  // useEffect(() => {
+  //   if (!currentUser && users.length > 0) {
+  //     setCurrentUser(users[0]);
+  //   }
+  // }, []);
   useEffect(() => {
-    if (!currentUser && users.length > 0) {
-      setCurrentUser(users[0]);
-    }
-  }, []);
+  if (currentUser) {
+    loadTeams();
+    loadProjects();
+    loadTasks();
+  }
+}, [currentUser]);
 
-  const login = (email: string, password: string): boolean => {
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      setCurrentUser(user);
-      return true;
-    }
+
+
+const login = async (email: string, password: string): Promise<boolean> => {
+  try {
+    const res = await loginUser(email, password); // res = { token, user }
+
+    localStorage.setItem("token", res.token);
+    setCurrentUser(res.user);
+
+    return true;
+  } catch (err) {
     return false;
-  };
+  }
+};
+
 
   const logout = () => {
     setCurrentUser(null);
   };
 
-  const register = (name: string, email: string, password: string): boolean => {
-    if (users.some(u => u.email === email)) {
-      return false;
-    }
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name,
-      email,
-      password,
-    };
-    setUsers([...users, newUser]);
-    setCurrentUser(newUser);
+const register = async (name: string, email: string, password: string): Promise<boolean> => {
+  try {
+    const res = await registerUser(name, email, password); // res = { token, user }
+
+    localStorage.setItem("token", res.token);
+    setCurrentUser(res.user);
+
     return true;
-  };
+  } catch (err) {
+    return false;
+  }
+};
 
-  const addTeam = (team: Team) => {
-    setTeams([...teams, team]);
-  };
+const loadTeams = async () => {
+  try {
+    const data = await fetchTeams();
+    setTeams(data);
+  } catch (err) {
+    console.error("Failed to load teams");
+  }
+};
+  // CREATE TEAM
+const addTeam = async (teamData: { name: string; members: TeamMember[] }) => {
+  try {
+    const newTeam = await createTeamAPI(teamData); // members are full objects
+    setTeams(prev => [...prev, newTeam]);
+  } catch (err) {
+    console.error("Create team error", err);
+  }
+};
 
-  const updateTeam = (teamId: string, updatedTeam: Team) => {
-    setTeams(teams.map(t => t.id === teamId ? updatedTeam : t));
-  };
+// UPDATE TEAM
+const updateTeam = async (teamId: string, updatedTeam: { name: string; members: TeamMember[] }) => {
+  try {
+    const team = await updateTeamAPI(teamId, updatedTeam);
+    setTeams(prev => prev.map(t => t._id === teamId ? team : t));
+  } catch (err) {
+    console.error("Update team error", err);
+  }
+};
 
-  const deleteTeam = (teamId: string) => {
-    setTeams(teams.filter(t => t.id !== teamId));
-  };
+// DELETE TEAM
+const deleteTeam = async (teamId: string) => {
+  try {
+    await deleteTeamAPI(teamId);
+    setTeams(prev => prev.filter(t => t._id !== teamId));
+  } catch (err) {
+    console.error("Delete team error");
+  }
+};
 
-  const addProject = (project: Project) => {
-    setProjects([...projects, project]);
-  };
 
-  const updateProject = (projectId: string, updatedProject: Project) => {
-    setProjects(projects.map(p => p.id === projectId ? updatedProject : p));
-  };
+ const loadProjects = async () => {
+  try {
+    const data = await fetchProjects();
+    setProjects(data);
+  } catch (err) {
+    console.error("Failed to load projects", err);
+  }
+};
 
-  const deleteProject = (projectId: string) => {
-    setProjects(projects.filter(p => p.id !== projectId));
-    setTasks(tasks.filter(t => t.projectId !== projectId));
-  };
+// CREATE PROJECT
+const addProject = async (projectData: { name: string; teamId: string; description?: string }) => {
+  try {
+    const newProject = await createProjectAPI(projectData);
+    setProjects(prev => [...prev, newProject]);
+  } catch (err) {
+    console.error("Create project error", err);
+  }
+};
 
-  const addTask = (task: Task) => {
-    setTasks([...tasks, task]);
-    
-    // Update member's current task count
-    if (task.assignedTo !== 'unassigned') {
-      updateMemberTaskCount(task.assignedTo, 1);
-    }
-  };
+// UPDATE PROJECT
+const updateProject = async (projectId: string, updatedProject: { name?: string; teamId?: string; description?: string }) => {
+  try {
+    const project = await updateProjectAPI(projectId, updatedProject);
+    setProjects(prev => prev.map(p => p._id === projectId ? project : p));
+  } catch (err) {
+    console.error("Update project error", err);
+  }
+};
 
-  const updateTask = (taskId: string, updatedTask: Task) => {
-    const oldTask = tasks.find(t => t.id === taskId);
-    
-    // Update task counts if assignment changed
+// DELETE PROJECT
+const deleteProject = async (projectId: string) => {
+  try {
+    await deleteProjectAPI(projectId);
+    setProjects(prev => prev.filter(p => p._id !== projectId));
+    // Remove tasks linked to deleted project
+    setTasks(prev => prev.filter(t => t.projectId !== projectId));
+  } catch (err) {
+    console.error("Delete project error", err);
+  }
+};
+const loadTasks = async () => {
+  try {
+    const data = await fetchTasks();
+    setTasks(data);
+  } catch (err) {
+    console.error("Failed to load tasks", err);
+  }
+};
+
+const addTask = (task: Task) => {
+  setTasks(prev => [...prev, task]);
+
+  if (task.assignedTo && task.assignedTo !== 'UNASSIGNED') {
+    updateMemberTaskCount(task.assignedTo, 1);
+  }
+};
+
+const updateTask = (taskId: string, updatedTask: Task) => {
+  setTasks(prev => {
+    const oldTask = prev.find(t => t.id === taskId);
+
     if (oldTask && oldTask.assignedTo !== updatedTask.assignedTo) {
-      if (oldTask.assignedTo !== 'unassigned') {
+      if (oldTask.assignedTo && oldTask.assignedTo !== 'UNASSIGNED') {
         updateMemberTaskCount(oldTask.assignedTo, -1);
       }
-      if (updatedTask.assignedTo !== 'unassigned') {
+      if (updatedTask.assignedTo && updatedTask.assignedTo !== 'UNASSIGNED') {
         updateMemberTaskCount(updatedTask.assignedTo, 1);
       }
     }
-    
-    setTasks(tasks.map(t => t.id === taskId ? updatedTask : t));
-  };
 
-  const deleteTask = (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (task && task.assignedTo !== 'unassigned') {
+    return prev.map(t => t.id === taskId ? updatedTask : t);
+  });
+};
+
+const deleteTask = (taskId: string) => {
+  setTasks(prev => {
+    const task = prev.find(t => t.id === taskId);
+    if (task && task.assignedTo && task.assignedTo !== 'UNASSIGNED') {
       updateMemberTaskCount(task.assignedTo, -1);
     }
-    setTasks(tasks.filter(t => t.id !== taskId));
-  };
+    return prev.filter(t => t.id !== taskId);
+  });
+};
 
-  const updateMemberTaskCount = (memberId: string, change: number) => {
-    setTeams(teams.map(team => ({
+const updateMemberTaskCount = (memberId: string, change: number) => {
+  setTeams(prev =>
+    prev.map(team => ({
       ...team,
       members: team.members.map(member =>
         member.id === memberId
-          ? { ...member, currentTasks: Math.max(0, member.currentTasks + change) }
+          ? { ...member, currentTasks: Math.max(0, (member.currentTasks || 0) + change) }
           : member
       )
-    })));
-  };
+    }))
+  );
+};
 
   const getMemberById = (memberId: string): TeamMember | undefined => {
     for (const team of teams) {
@@ -150,67 +235,73 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const getProjectById = (projectId: string): Project | undefined => {
-    return projects.find(p => p.id === projectId);
+    return projects.find(p => p._id === projectId);
   };
 
   const getTeamById = (teamId: string): Team | undefined => {
-    return teams.find(t => t.id === teamId);
+    return teams.find(t => t._id === teamId);
   };
 
-  const reassignTasks = () => {
-    const newLogs: ActivityLog[] = [];
-    const updatedTasks = [...tasks];
-    const teamsCopy = JSON.parse(JSON.stringify(teams)) as Team[];
+const reassignTasks = () => {
+  const newLogs: ActivityLog[] = [];
+  const updatedTasks = [...tasks];
 
-    teamsCopy.forEach(team => {
-      // Find overloaded members
-      const overloadedMembers = team.members.filter(m => m.currentTasks > m.capacity);
-      
-      overloadedMembers.forEach(overloadedMember => {
-        // Get tasks assigned to this member (only Low and Medium priority)
-        const memberTasks = updatedTasks
-          .filter(t => t.assignedTo === overloadedMember.id && t.priority !== 'High')
-          .sort((a, b) => a.priority === 'Low' ? -1 : 1); // Low priority first
+  // Copy teams safely
+  const teamsCopy = teams.map(team => ({
+    ...team,
+    members: team.members.map(m => ({ ...m }))
+  }));
 
-        const excessCount = overloadedMember.currentTasks - overloadedMember.capacity;
-        let reassignedCount = 0;
+  const priorityValue = (priority: string) => {
+    switch (priority) {
+      case 'High': return 3;
+      case 'Medium': return 2;
+      case 'Low': return 1;
+      default: return 2;
+    }
+  };
 
-        for (const task of memberTasks) {
-          if (reassignedCount >= excessCount) break;
+  teamsCopy.forEach(team => {
+    const overloadedMembers = team.members.filter(m => (m.currentTasks || 0) > m.capacity);
 
-          // Find member with available capacity
-          const availableMember = team.members.find(
-            m => m.id !== overloadedMember.id && m.currentTasks < m.capacity
-          );
+    overloadedMembers.forEach(overloadedMember => {
+      const memberTasks = updatedTasks
+        .filter(t => t.assignedTo === overloadedMember.id && t.priority !== 'High')
+        .sort((a, b) => priorityValue(a.priority) - priorityValue(b.priority));
 
-          if (availableMember) {
-            // Reassign task
-            const taskIndex = updatedTasks.findIndex(t => t.id === task.id);
-            updatedTasks[taskIndex] = { ...task, assignedTo: availableMember.id };
+      const excessCount = (overloadedMember.currentTasks || 0) - overloadedMember.capacity;
+      let reassignedCount = 0;
 
-            // Update counts
-            overloadedMember.currentTasks--;
-            availableMember.currentTasks++;
-            reassignedCount++;
+      for (const task of memberTasks) {
+        if (reassignedCount >= excessCount) break;
 
-            // Log activity
-            newLogs.push({
-              id: `log-${Date.now()}-${reassignedCount}`,
-              timestamp: new Date(),
-              action: 'reassigned',
-              taskTitle: task.title,
-              fromMember: overloadedMember.name,
-              toMember: availableMember.name,
-            });
-          }
+        const availableMember = team.members.find(m => m.id !== overloadedMember.id && (m.currentTasks || 0) < m.capacity);
+        if (!availableMember) continue;
+
+        const taskIndex = updatedTasks.findIndex(t => t.id === task.id);
+        if (taskIndex >= 0) {
+          updatedTasks[taskIndex] = { ...task, assignedTo: availableMember.id };
+          overloadedMember.currentTasks = Math.max(0, (overloadedMember.currentTasks || 0) - 1);
+          availableMember.currentTasks = (availableMember.currentTasks || 0) + 1;
+          reassignedCount++;
+
+          newLogs.push({
+            id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            timestamp: new Date(),
+            action: 'reassigned',
+            taskTitle: task.title,
+            fromMember: overloadedMember.name,
+            toMember: availableMember.name
+          });
         }
-      });
+      }
     });
+  });
 
-    setTasks(updatedTasks);
-    setTeams(teamsCopy);
-    setActivityLogs([...newLogs, ...activityLogs].slice(0, 10));
-  };
+  setTasks(updatedTasks);
+  setTeams(teamsCopy);
+  setActivityLogs(prev => [...newLogs, ...prev].slice(0, 10));
+}
 
   return (
     <AppContext.Provider
@@ -218,6 +309,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         currentUser,
         users,
         teams,
+         setTeams,    
         projects,
         tasks,
         activityLogs,

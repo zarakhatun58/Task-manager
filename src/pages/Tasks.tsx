@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Plus, CheckSquare, Trash2, Edit, AlertTriangle } from 'lucide-react';
 import { Task } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import './Tasks.css';
+import { createTaskAPI, updateTaskAPI } from '@/services/taskService';
 
 const Tasks: React.FC = () => {
   const { tasks, projects, teams, addTask, updateTask, deleteTask, getMemberById, getProjectById, getTeamById } = useApp();
@@ -19,6 +20,9 @@ const Tasks: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const selectedProject = useMemo(() => getProjectById(selectedProjectId), [selectedProjectId, projects]);
+  const selectedTeam = useMemo(() => selectedProject ? getTeamById(selectedProject.teamId) : null, [selectedProject, teams]);
+
   const [selectedMemberId, setSelectedMemberId] = useState('unassigned');
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High'>('Medium');
   const [status, setStatus] = useState<'Pending' | 'In Progress' | 'Done'>('Pending');
@@ -39,6 +43,7 @@ const Tasks: React.FC = () => {
     setWarningMessage('');
   };
 
+
   const checkCapacity = (memberId: string) => {
     if (memberId === 'unassigned') {
       setShowWarning(false);
@@ -55,6 +60,11 @@ const Tasks: React.FC = () => {
       setShowWarning(false);
     }
   };
+  const normalizedMembers = selectedTeam?.members.map(m => ({
+    ...m,
+    id: m._id || m.id,
+    currentTasks: m.currentTasks || 0
+  })) || [];
 
   const handleMemberChange = (memberId: string) => {
     setSelectedMemberId(memberId);
@@ -98,7 +108,7 @@ const Tasks: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title || !selectedProjectId) {
@@ -110,41 +120,67 @@ const Tasks: React.FC = () => {
       return;
     }
 
-    if (editingTask) {
-      updateTask(editingTask.id, {
-        ...editingTask,
-        title,
-        description,
-        projectId: selectedProjectId,
-        assignedTo: selectedMemberId,
-        priority,
-        status,
-      });
-      toast({
-        title: "Task Updated",
-        description: `${title} has been updated successfully`,
-      });
-    } else {
-      const newTask: Task = {
-        id: `task-${Date.now()}`,
-        title,
-        description,
-        projectId: selectedProjectId,
-        assignedTo: selectedMemberId,
-        priority,
-        status,
-        createdAt: new Date(),
-      };
-      addTask(newTask);
-      toast({
-        title: "Task Created",
-        description: `${title} has been created successfully`,
-      });
-    }
+    try {
+      if (editingTask) {
+        // API call to update task
+        const updatedTask = await updateTaskAPI(editingTask.id, {
+          title,
+          description,
+          projectId: selectedProjectId,
+          assignedTo: selectedMemberId,
+          priority,
+          status,
+        });
+        updateTask(editingTask.id, updatedTask);
+        toast({
+          title: "Task Updated",
+          description: `${title} has been updated successfully`,
+        });
+      } else {
+        // API call to create task
+        const response = await createTaskAPI({
+          title,
+          description,
+          projectId: selectedProjectId,
+          assignedTo: selectedMemberId,
+          priority,
+          status,
+        });
+        const createdTaskFromBackend = response.task;
 
-    setIsDialogOpen(false);
-    resetForm();
+        // normalize _id -> id
+        const normalizedTask: Task = {
+          id: createdTaskFromBackend._id,
+          title: createdTaskFromBackend.title,
+          description: createdTaskFromBackend.description,
+          projectId: createdTaskFromBackend.projectId,
+          assignedTo: createdTaskFromBackend.assignedTo,
+          priority: createdTaskFromBackend.priority,
+          status: createdTaskFromBackend.status,
+          createdAt: new Date(createdTaskFromBackend.createdAt),
+        };
+
+        // add to frontend state
+        addTask(normalizedTask);
+        // addTask(createdTask); // add returned task from backend
+        toast({
+          title: "Task Created",
+          description: `${title} has been created successfully`,
+        });
+      }
+
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to save task",
+        variant: "destructive",
+      });
+      console.error(err);
+    }
   };
+
 
   const handleEdit = (task: Task) => {
     setEditingTask(task);
@@ -172,8 +208,6 @@ const Tasks: React.FC = () => {
   });
 
   const allMembers = teams.flatMap(team => team.members);
-  const selectedProject = selectedProjectId ? getProjectById(selectedProjectId) : null;
-  const selectedTeam = selectedProject ? getTeamById(selectedProject.teamId) : null;
 
   const getPriorityClass = (priority: string) => {
     switch (priority) {
@@ -241,11 +275,13 @@ const Tasks: React.FC = () => {
                 <Label htmlFor="project">Project</Label>
                 <Select value={selectedProjectId} onValueChange={setSelectedProjectId} required>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a project" />
+                    <SelectValue placeholder="Select a project">
+                      {projects.find(p => p._id === selectedProjectId)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
+                      <SelectItem key={project._id} value={project._id}>
                         {project.name}
                       </SelectItem>
                     ))}
@@ -262,11 +298,13 @@ const Tasks: React.FC = () => {
                 </div>
                 <Select value={selectedMemberId} onValueChange={handleMemberChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a member" />
+                    <SelectValue placeholder="Select a member">
+                      {normalizedMembers.find(m => m.id === selectedMemberId)?.name || 'Select a member'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {selectedTeam?.members.map(member => (
+                    {normalizedMembers.map(member => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.name} ({member.currentTasks}/{member.capacity})
                       </SelectItem>
@@ -328,7 +366,7 @@ const Tasks: React.FC = () => {
           <SelectContent>
             <SelectItem value="all">All Projects</SelectItem>
             {projects.map(project => (
-              <SelectItem key={project.id} value={project.id}>
+              <SelectItem key={project._id} value={project._id}>
                 {project.name}
               </SelectItem>
             ))}
@@ -355,7 +393,7 @@ const Tasks: React.FC = () => {
         {filteredTasks.map(task => {
           const project = getProjectById(task.projectId);
           const member = task.assignedTo !== 'unassigned' ? getMemberById(task.assignedTo) : null;
-          
+
           return (
             <div key={task.id} className="task-card">
               <div className="task-header">

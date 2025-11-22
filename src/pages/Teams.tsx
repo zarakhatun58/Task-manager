@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,14 +8,24 @@ import { Plus, Users as UsersIcon, Trash2, Edit } from 'lucide-react';
 import { Team, TeamMember } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import './Teams.css';
+import { createTeamAPI, deleteTeamAPI, fetchTeams, updateTeamAPI } from '@/services/teamService';
 
 const Teams: React.FC = () => {
-  const { teams, addTeam, updateTeam, deleteTeam, currentUser } = useApp();
+  // const { teams, addTeam, updateTeam, deleteTeam, currentUser } = useApp();
+  const { teams, setTeams } = useApp();   // you MUST expose setTeams in context
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [teamName, setTeamName] = useState('');
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [newMember, setNewMember] = useState({ name: '', role: '', capacity: 3 });
+
+  // ============= LOAD TEAMS FROM BACKEND =============
+  useEffect(() => {
+    (async () => {
+      const data = await fetchTeams();
+      setTeams(data);
+    })();
+  }, []);
 
   const resetForm = () => {
     setTeamName('');
@@ -24,6 +34,7 @@ const Teams: React.FC = () => {
     setEditingTeam(null);
   };
 
+  // ============= ADD MEMBER =============
   const handleAddMember = () => {
     if (!newMember.name || !newMember.role) {
       toast({
@@ -42,68 +53,80 @@ const Teams: React.FC = () => {
       currentTasks: 0,
     };
 
-    setMembers([...members, member]);
+    setMembers(prev => [...prev, member]);
     setNewMember({ name: '', role: '', capacity: 3 });
   };
 
-  const handleRemoveMember = (memberId: string) => {
-    setMembers(members.filter(m => m.id !== memberId));
+  const handleRemoveMember = (id: string) => {
+    setMembers(prev => prev.filter(m => m.id !== id));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ============= SUBMIT TEAM (CREATE / UPDATE) =============
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!teamName || members.length === 0) {
-      toast({
-        title: "Invalid Team",
-        description: "Team must have a name and at least one member",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!teamName || members.length === 0) {
+    toast({
+      title: "Invalid Team",
+      description: "Team must have a name and at least one member",
+      variant: "destructive",
+    });
+    return;
+  }
 
+  try {
     if (editingTeam) {
-      updateTeam(editingTeam.id, {
-        ...editingTeam,
+      const updated = await updateTeamAPI(editingTeam._id, {
         name: teamName,
-        members,
+        members, // full objects
       });
-      toast({
-        title: "Team Updated",
-        description: `${teamName} has been updated successfully`,
-      });
+
+      setTeams(prev => prev.map(t => t._id === updated._id ? updated : t));
+
+      toast({ title: "Team Updated", description: `${teamName} updated successfully` });
+
     } else {
-      const newTeam: Team = {
-        id: `team-${Date.now()}`,
+      const newTeam = await createTeamAPI({
         name: teamName,
-        members,
-        createdBy: currentUser?.id || '',
-      };
-      addTeam(newTeam);
-      toast({
-        title: "Team Created",
-        description: `${teamName} has been created successfully`,
+        members, // full objects here too
       });
+
+      setTeams(prev => [...prev, newTeam]);
+
+      toast({ title: "Team Created", description: `${teamName} created successfully` });
     }
 
     setIsDialogOpen(false);
     resetForm();
-  };
 
+  } catch (err) {
+    toast({
+      title: "Error",
+      description: "Failed to save team",
+      variant: "destructive",
+    });
+    console.error(err);
+  }
+};
+
+
+  // ============= EDIT TEAM =============
   const handleEdit = (team: Team) => {
     setEditingTeam(team);
     setTeamName(team.name);
-    setMembers([...team.members]);
+    setMembers(team.members);
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (teamId: string) => {
-    deleteTeam(teamId);
-    toast({
-      title: "Team Deleted",
-      description: "Team has been deleted successfully",
-    });
+  // ============= DELETE TEAM =============
+  const handleDelete = async (teamId: string) => {
+    await deleteTeamAPI(teamId);
+
+    setTeams(prev => prev.filter(t => t._id !== teamId));
+
+    toast({ title: "Team Deleted", description: "Team has been deleted" });
   };
+
 
   return (
     <div className="teams-page">
@@ -197,7 +220,7 @@ const Teams: React.FC = () => {
 
       <div className="teams-grid">
         {teams.map(team => (
-          <div key={team.id} className="team-card">
+          <div key={team._id} className="team-card">
             <div className="team-card-header">
               <div className="team-icon">
                 <UsersIcon size={24} />
@@ -210,7 +233,7 @@ const Teams: React.FC = () => {
                 <Button variant="ghost" size="sm" onClick={() => handleEdit(team)}>
                   <Edit size={16} />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(team.id)}>
+                <Button variant="ghost" size="sm" onClick={() => handleDelete(team._id)}>
                   <Trash2 size={16} />
                 </Button>
               </div>

@@ -13,23 +13,25 @@ const Login: React.FC = () => {
   const { login } = useApp();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (login(email, password)) {
-      toast({
-        title: "Login Successful",
-        description: "Welcome back!",
-      });
-      navigate('/');
-    } else {
-      toast({
-        title: "Login Failed",
-        description: "Invalid email or password",
-        variant: "destructive",
-      });
-    }
-  };
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const success = await login(email, password);
+
+  if (success) {
+    toast({
+      title: "Login Successful",
+    });
+    navigate("/");
+  } else {
+    toast({
+      title: "Login Failed",
+      description: "Invalid email or password",
+      variant: "destructive",
+    });
+  }
+};
+
 
   return (
     <div className="auth-container">

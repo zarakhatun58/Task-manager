@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 
 export default function auth(req, res, next) {
@@ -12,7 +13,7 @@ export default function auth(req, res, next) {
     if (err)
       return res.status(401).json({ message: "Invalid token" });
 
-    req.user = decoded.id;
+    req.user = new mongoose.Types.ObjectId(decoded.id); 
     next();
   });
 }
