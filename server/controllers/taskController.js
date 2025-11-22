@@ -13,9 +13,9 @@ async function countTasksForTeam(teamId) {
     status: { $in: ["Pending", "In Progress"] }
   });
 
-  const counts= {};
+  const counts = {};
   for (const t of tasks) {
-    const mid = t.assignedTo || "unassigned";
+    const mid = t.assignedTo ? t.assignedTo.toString() : null;
     counts[mid] = (counts[mid] || 0) + 1;
   }
   return counts;
@@ -26,7 +26,8 @@ export const createTask = async (req, res) => {
   try {
     const { title, description, projectId, assignedTo, priority, status } = req.body;
 
-    if (!title || !projectId) return res.status(400).json({ message: "title and projectId required" });
+    if (!title || !projectId)
+      return res.status(400).json({ message: "title and projectId required" });
 
     const project = await Project.findById(projectId);
     if (!project) return res.status(400).json({ message: "Project not found" });
@@ -34,9 +35,9 @@ export const createTask = async (req, res) => {
     const team = await Team.findById(project.teamId);
     if (!team) return res.status(400).json({ message: "Team for project not found" });
 
-    // Check if assignedTo is valid team member
+    // Validate assigned member
     let warning = null;
-    if (assignedTo && assignedTo !== "unassigned") {
+    if (assignedTo) {
       const member = team.members.find(m => String(m._id) === String(assignedTo));
       if (!member) return res.status(400).json({ message: "Assigned member not part of project team" });
 
@@ -51,7 +52,7 @@ export const createTask = async (req, res) => {
       title,
       description,
       projectId,
-      assignedTo: assignedTo || "unassigned",
+      assignedTo: assignedTo || null,
       priority: priority || "Medium",
       status: status || "Pending",
     });
@@ -70,13 +71,16 @@ export const createTask = async (req, res) => {
 // GET TASKS
 export const getTasks = async (req, res) => {
   try {
-    const filter= {};
+    const filter = {};
     if (req.query.projectId) filter.projectId = req.query.projectId;
     if (req.query.memberId) filter.assignedTo = req.query.memberId;
     if (req.query.status) filter.status = req.query.status;
     if (req.query.priority) filter.priority = req.query.priority;
 
-    const tasks = await Task.find(filter).sort({ createdAt: -1 });
+    const tasks = await Task.find(filter)
+      .populate('assignedTo', 'name') // populate only member name
+      .sort({ createdAt: -1 });
+
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ message: "Error fetching tasks", error: err.toString() });
@@ -86,7 +90,7 @@ export const getTasks = async (req, res) => {
 // GET SINGLE TASK
 export const getTask = async (req, res) => {
   try {
-    const task = await Task.findById(req.params.taskId);
+    const task = await Task.findById(req.params.taskId).populate('assignedTo', 'name');
     if (!task) return res.status(404).json({ message: "Task not found" });
     res.json(task);
   } catch (err) {
@@ -97,30 +101,44 @@ export const getTask = async (req, res) => {
 // UPDATE TASK
 export const updateTask = async (req, res) => {
   try {
-    const updates= {};
+    const updates = {};
     const allowed = ["title", "description", "assignedTo", "priority", "status"];
     allowed.forEach(key => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     });
 
-    if (updates.assignedTo && updates.assignedTo !== "unassigned") {
+    // Validate assigned member
+    if (updates.assignedTo) {
       const task = await Task.findById(req.params.taskId);
       if (!task) return res.status(404).json({ message: "Task not found" });
 
       const project = await Project.findById(task.projectId);
+      if (!project) return res.status(400).json({ message: "Project not found" });
+
       const team = await Team.findById(project.teamId);
+      if (!team) return res.status(400).json({ message: "Team not found" });
 
       const member = team.members.find(m => String(m._id) === String(updates.assignedTo));
       if (!member) return res.status(400).json({ message: "Assigned member not part of project team" });
     }
 
-    const updated = await Task.findByIdAndUpdate(req.params.taskId, updates, { new: true });
-    await ActivityTask.create({ userId: req.user, message: `Task "${updated.title}" updated.` });
-    res.json(updated);
+    // Update task
+    await Task.findByIdAndUpdate(req.params.taskId, {
+      ...updates,
+      assignedTo: updates.assignedTo || null
+    });
+
+    // Retrieve updated task with populated assignedTo
+    const updatedTask = await Task.findById(req.params.taskId).populate('assignedTo', 'name');
+
+    await ActivityTask.create({ userId: req.user, message: `Task "${updatedTask.title}" updated.` });
+
+    res.json(updatedTask);
   } catch (err) {
     res.status(500).json({ message: "Error updating task", error: err.toString() });
   }
 };
+
 
 // DELETE TASK
 export const deleteTask = async (req, res) => {
@@ -147,7 +165,12 @@ export const autoAssign = async (req, res) => {
     const counts = await countTasksForTeam(team._id);
 
     const members = team.members
-      .map(m => ({ id: m._id.toString(), name: m.name, capacity: m.capacity, current: counts[m._id.toString()] || 0 }))
+      .map(m => ({
+        id: m._id.toString(),
+        name: m.name,
+        capacity: m.capacity,
+        current: counts[m._id.toString()] || 0
+      }))
       .sort((a, b) => a.current - b.current);
 
     const free = members.find(m => m.current < m.capacity);

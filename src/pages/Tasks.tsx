@@ -11,7 +11,7 @@ import { Plus, CheckSquare, Trash2, Edit, AlertTriangle } from 'lucide-react';
 import { Task } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import './Tasks.css';
-import { createTaskAPI, updateTaskAPI } from '@/services/taskService';
+import { createTaskAPI, deleteTaskAPI, updateTaskAPI } from '@/services/taskService';
 
 const Tasks: React.FC = () => {
   const { tasks, projects, teams, addTask, updateTask, deleteTask, getMemberById, getProjectById, getTeamById } = useApp();
@@ -60,11 +60,15 @@ const Tasks: React.FC = () => {
       setShowWarning(false);
     }
   };
+
   const normalizedMembers = selectedTeam?.members.map(m => ({
-    ...m,
-    id: m._id || m.id,
-    currentTasks: m.currentTasks || 0
+    id: m._id.toString(),
+    name: m.name,
+    role: m.role,
+    capacity: m.capacity,
+    currentTasks: m.currentTasks || 0,
   })) || [];
+
 
   const handleMemberChange = (memberId: string) => {
     setSelectedMemberId(memberId);
@@ -127,9 +131,10 @@ const Tasks: React.FC = () => {
           title,
           description,
           projectId: selectedProjectId,
-          assignedTo: selectedMemberId,
+          assignedTo: selectedMemberId !== 'unassigned' ? selectedMemberId : null,
           priority,
           status,
+
         });
         updateTask(editingTask.id, updatedTask);
         toast({
@@ -142,7 +147,7 @@ const Tasks: React.FC = () => {
           title,
           description,
           projectId: selectedProjectId,
-          assignedTo: selectedMemberId,
+          assignedTo: selectedMemberId !== 'unassigned' ? selectedMemberId : null,
           priority,
           status,
         });
@@ -187,18 +192,20 @@ const Tasks: React.FC = () => {
     setTitle(task.title);
     setDescription(task.description);
     setSelectedProjectId(task.projectId);
-    setSelectedMemberId(task.assignedTo);
+    setSelectedMemberId(task.assignedTo ? task.assignedTo.toString() : 'unassigned');
     setPriority(task.priority);
     setStatus(task.status);
     setIsDialogOpen(true);
   };
 
-  const handleDelete = (taskId: string) => {
-    deleteTask(taskId);
-    toast({
-      title: "Task Deleted",
-      description: "Task has been deleted successfully",
-    });
+  const handleDelete = async (taskId: string) => {
+    try {
+      await deleteTaskAPI(taskId);
+      deleteTask(taskId);
+      toast({ title: 'Task Deleted', description: 'Task has been deleted successfully' });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to delete task', variant: 'destructive' });
+    }
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -207,7 +214,13 @@ const Tasks: React.FC = () => {
     return true;
   });
 
-  const allMembers = teams.flatMap(team => team.members);
+  const allMembers = teams.flatMap(team =>
+    team.members.map(member => ({
+      ...member,
+      id: member._id.toString(),
+      teamId: team._id,
+    }))
+  );
 
   const getPriorityClass = (priority: string) => {
     switch (priority) {
@@ -309,6 +322,7 @@ const Tasks: React.FC = () => {
                         {member.name} ({member.currentTasks}/{member.capacity})
                       </SelectItem>
                     ))}
+                    
                   </SelectContent>
                 </Select>
               </div>
@@ -392,7 +406,7 @@ const Tasks: React.FC = () => {
       <div className="tasks-grid">
         {filteredTasks.map(task => {
           const project = getProjectById(task.projectId);
-          const member = task.assignedTo !== 'unassigned' ? getMemberById(task.assignedTo) : null;
+         const member = task.assignedTo ? getMemberById(task.assignedTo) : null;
 
           return (
             <div key={task.id} className="task-card">

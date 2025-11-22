@@ -29,7 +29,7 @@ export interface Task {
   title: string;
   description: string;
   projectId: string;
-  assignedTo: string; // member id or "unassigned"
+ assignedTo: string | null; 
   priority: "Low" | "Medium" | "High";
   status: "Pending" | "In Progress" | "Done";
   createdAt: Date;

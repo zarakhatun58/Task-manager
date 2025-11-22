@@ -181,7 +181,7 @@ const loadTasks = async () => {
 const addTask = (task: Task) => {
   setTasks(prev => [...prev, task]);
 
-  if (task.assignedTo && task.assignedTo !== 'UNASSIGNED') {
+  if (task.assignedTo) {
     updateMemberTaskCount(task.assignedTo, 1);
   }
 };
@@ -191,12 +191,8 @@ const updateTask = (taskId: string, updatedTask: Task) => {
     const oldTask = prev.find(t => t.id === taskId);
 
     if (oldTask && oldTask.assignedTo !== updatedTask.assignedTo) {
-      if (oldTask.assignedTo && oldTask.assignedTo !== 'UNASSIGNED') {
-        updateMemberTaskCount(oldTask.assignedTo, -1);
-      }
-      if (updatedTask.assignedTo && updatedTask.assignedTo !== 'UNASSIGNED') {
-        updateMemberTaskCount(updatedTask.assignedTo, 1);
-      }
+      if (oldTask.assignedTo) updateMemberTaskCount(oldTask.assignedTo, -1);
+      if (updatedTask.assignedTo) updateMemberTaskCount(updatedTask.assignedTo, 1);
     }
 
     return prev.map(t => t.id === taskId ? updatedTask : t);
@@ -206,9 +202,7 @@ const updateTask = (taskId: string, updatedTask: Task) => {
 const deleteTask = (taskId: string) => {
   setTasks(prev => {
     const task = prev.find(t => t.id === taskId);
-    if (task && task.assignedTo && task.assignedTo !== 'UNASSIGNED') {
-      updateMemberTaskCount(task.assignedTo, -1);
-    }
+    if (task?.assignedTo) updateMemberTaskCount(task.assignedTo, -1);
     return prev.filter(t => t.id !== taskId);
   });
 };
@@ -218,7 +212,7 @@ const updateMemberTaskCount = (memberId: string, change: number) => {
     prev.map(team => ({
       ...team,
       members: team.members.map(member =>
-        member.id === memberId
+     member._id === memberId || member.id === memberId
           ? { ...member, currentTasks: Math.max(0, (member.currentTasks || 0) + change) }
           : member
       )
@@ -227,12 +221,13 @@ const updateMemberTaskCount = (memberId: string, change: number) => {
 };
 
   const getMemberById = (memberId: string): TeamMember | undefined => {
-    for (const team of teams) {
-      const member = team.members.find(m => m.id === memberId);
-      if (member) return member;
-    }
-    return undefined;
-  };
+  for (const team of teams) {
+    const member = team.members.find(m => m._id === memberId || m.id === memberId);
+    if (member) return member;
+  }
+  return undefined;
+};
+
 
   const getProjectById = (projectId: string): Project | undefined => {
     return projects.find(p => p._id === projectId);
@@ -265,8 +260,8 @@ const reassignTasks = () => {
     const overloadedMembers = team.members.filter(m => (m.currentTasks || 0) > m.capacity);
 
     overloadedMembers.forEach(overloadedMember => {
-      const memberTasks = updatedTasks
-        .filter(t => t.assignedTo === overloadedMember.id && t.priority !== 'High')
+     const memberTasks = updatedTasks
+  .filter(t => t.assignedTo === overloadedMember._id && t.priority !== 'High')
         .sort((a, b) => priorityValue(a.priority) - priorityValue(b.priority));
 
       const excessCount = (overloadedMember.currentTasks || 0) - overloadedMember.capacity;
@@ -275,12 +270,13 @@ const reassignTasks = () => {
       for (const task of memberTasks) {
         if (reassignedCount >= excessCount) break;
 
-        const availableMember = team.members.find(m => m.id !== overloadedMember.id && (m.currentTasks || 0) < m.capacity);
+        const availableMember = team.members.find(m => m._id !== overloadedMember._id && (m.currentTasks || 0) < m.capacity);
+
         if (!availableMember) continue;
 
         const taskIndex = updatedTasks.findIndex(t => t.id === task.id);
         if (taskIndex >= 0) {
-          updatedTasks[taskIndex] = { ...task, assignedTo: availableMember.id };
+          updatedTasks[taskIndex] = { ...task, assignedTo: availableMember };
           overloadedMember.currentTasks = Math.max(0, (overloadedMember.currentTasks || 0) - 1);
           availableMember.currentTasks = (availableMember.currentTasks || 0) + 1;
           reassignedCount++;
