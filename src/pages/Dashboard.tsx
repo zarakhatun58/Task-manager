@@ -16,49 +16,75 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  const allMembers = teams.flatMap(team => team.members);
-  const overloadedMembers = allMembers.filter(m => m.currentTasks > m.capacity);
+  // -----------------------------------
+  // NORMALIZED TEAM MEMBERS (safe IDs)
+  // -----------------------------------
+ const allMembers = teams.flatMap(team =>
+  team.members.map(m => {
+    const taskCount = tasks.filter(t => t.assignedTo === m._id).length;
 
+    return {
+      ...m,
+      id: m._id || m.id,
+      currentTasks: taskCount,
+      capacity: m.capacity || 0,
+    };
+  })
+);
+
+
+  const overloadedMembers = allMembers.filter(
+    m => m.currentTasks > m.capacity
+  );
+
+  // -----------------------------------
+  // DASHBOARD STATS
+  // -----------------------------------
   const stats = [
     {
       icon: FolderKanban,
-      label: 'Total Projects',
+      label: "Total Projects",
       value: projects.length,
-      color: 'primary',
+      color: "primary",
     },
     {
       icon: CheckCircle2,
-      label: 'Total Tasks',
+      label: "Total Tasks",
       value: tasks.length,
-      color: 'success',
+      color: "success",
     },
     {
       icon: Users,
-      label: 'Team Members',
+      label: "Team Members",
       value: allMembers.length,
-      color: 'warning',
+      color: "warning",
     },
     {
       icon: BarChart3,
-      label: 'Overloaded',
+      label: "Overloaded Members",
       value: overloadedMembers.length,
-      color: 'destructive',
+      color: "destructive",
     },
   ];
 
   return (
     <div className="dashboard">
+      {/* Header */}
       <div className="dashboard-header">
         <div>
           <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Overview of your projects and team performance</p>
+          <p className="page-subtitle">
+            Overview of your projects and team performance
+          </p>
         </div>
+
         <Button onClick={handleReassign} className="reassign-button">
           <RefreshCw size={18} />
           Reassign Tasks
         </Button>
       </div>
 
+      {/* Stats */}
       <div className="stats-grid">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
@@ -76,56 +102,74 @@ const Dashboard: React.FC = () => {
         })}
       </div>
 
+      {/* Team and Activity */}
       <div className="dashboard-grid">
+        {/* TEAM SUMMARY */}
         <div className="dashboard-card">
           <h2 className="card-title">Team Summary</h2>
-          <div className="team-summary">
-            {allMembers.map(member => {
-              const percentage = (member.currentTasks / member.capacity) * 100;
-              const isOverloaded = member.currentTasks > member.capacity;
-              
-              return (
-                <div key={member.id} className="member-item">
-                  <div className="member-info">
-                    <p className="member-name">{member.name}</p>
-                    <p className="member-role">{member.role}</p>
-                  </div>
-                  <div className="member-capacity">
-                    <div className="capacity-text">
-                      <span className={isOverloaded ? 'overloaded' : ''}>
-                        {member.currentTasks} / {member.capacity}
-                      </span>
+
+          {allMembers.length === 0 ? (
+            <p className="empty-state">No members found</p>
+          ) : (
+            <div className="team-summary">
+              {allMembers.map(member => {
+                const percentage =
+                  member.capacity > 0
+                    ? (member.currentTasks / member.capacity) * 100
+                    : 0;
+
+                const isOverloaded = member.currentTasks > member.capacity;
+
+                return (
+                  <div key={member.id} className="member-item">
+                    <div className="member-info">
+                      <p className="member-name">{member.name}</p>
+                      <p className="member-role">{member.role}</p>
                     </div>
-                    <div className="capacity-bar">
-                      <div
-                        className={`capacity-fill ${isOverloaded ? 'overloaded' : ''}`}
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
-                      />
+
+                    <div className="member-capacity">
+                      <div className="capacity-text">
+                        <span className={isOverloaded ? "overloaded" : ""}>
+                          {member.currentTasks} / {member.capacity}
+                        </span>
+                      </div>
+
+                      <div className="capacity-bar">
+                        <div
+                          className={`capacity-fill ${
+                            isOverloaded ? "overloaded" : ""
+                          }`}
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
+        {/* ACTIVITY LOGS */}
         <div className="dashboard-card">
           <h2 className="card-title">Recent Activity</h2>
+
           {activityLogs.length === 0 ? (
-            <p className="empty-state">No recent reassignments</p>
+            <p className="empty-state">No recent activity</p>
           ) : (
             <div className="activity-list">
               {activityLogs.slice(0, 5).map(log => (
                 <div key={log.id} className="activity-item">
                   <div className="activity-time">
-                    {new Date(log.timestamp).toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
+                    {new Date(log.timestamp).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </div>
+
                   <div className="activity-content">
-                    Task <strong>"{log.taskTitle}"</strong> reassigned from{' '}
-                    <strong>{log.fromMember}</strong> to{' '}
+                    Task <strong>"{log.taskTitle}"</strong> reassigned from{" "}
+                    <strong>{log.fromMember}</strong> to{" "}
                     <strong>{log.toMember}</strong>
                   </div>
                 </div>
@@ -137,5 +181,6 @@ const Dashboard: React.FC = () => {
     </div>
   );
 };
+
 
 export default Dashboard;

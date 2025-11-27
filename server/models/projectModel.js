@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const projectSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "TaskUser", required: true },
     teamId: { type: mongoose.Schema.Types.ObjectId, ref: "Team", required: true },
     name: { type: String, required: true },
     description: { type: String },

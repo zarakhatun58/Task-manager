@@ -14,23 +14,26 @@ const Register: React.FC = () => {
   const { register } = useApp();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (register(name, email, password)) {
-      toast({
-        title: "Registration Successful",
-        description: "Your account has been created!",
-      });
-      navigate('/');
-    } else {
-      toast({
-        title: "Registration Failed",
-        description: "Email already exists",
-        variant: "destructive",
-      });
-    }
-  };
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  const success = await register(name, email, password);
+  
+  if (success) {
+    toast({
+      title: "Registration Successful",
+      description: "Your account has been created!",
+    });
+    navigate('/');
+  } else {
+    toast({
+      title: "Registration Failed",
+      description: "Email already exists",
+      variant: "destructive",
+    });
+  }
+};
+
 
   return (
     <div className="auth-container">

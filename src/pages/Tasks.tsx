@@ -62,7 +62,7 @@ const Tasks: React.FC = () => {
   };
 
   const normalizedMembers = selectedTeam?.members.map(m => ({
-    id: m._id.toString(),
+    id: m._id,
     name: m.name,
     role: m.role,
     capacity: m.capacity,
@@ -97,7 +97,7 @@ const Tasks: React.FC = () => {
       .sort((a, b) => a.currentTasks - b.currentTasks)[0];
 
     if (availableMember) {
-      setSelectedMemberId(availableMember.id);
+      setSelectedMemberId(availableMember._id);
       setShowWarning(false);
       toast({
         title: "Auto-assigned",
@@ -127,16 +127,14 @@ const Tasks: React.FC = () => {
     try {
       if (editingTask) {
         // API call to update task
-        const updatedTask = await updateTaskAPI(editingTask.id, {
+        const updatedTask = await updateTaskAPI(editingTask._id, {
           title,
           description,
-          projectId: selectedProjectId,
           assignedTo: selectedMemberId !== 'unassigned' ? selectedMemberId : null,
           priority,
           status,
-
         });
-        updateTask(editingTask.id, updatedTask);
+        updateTask(editingTask._id, updatedTask);
         toast({
           title: "Task Updated",
           description: `${title} has been updated successfully`,
@@ -155,7 +153,7 @@ const Tasks: React.FC = () => {
 
         // normalize _id -> id
         const normalizedTask: Task = {
-          id: createdTaskFromBackend._id,
+          _id: createdTaskFromBackend._id,
           title: createdTaskFromBackend.title,
           description: createdTaskFromBackend.description,
           projectId: createdTaskFromBackend.projectId,
@@ -192,7 +190,7 @@ const Tasks: React.FC = () => {
     setTitle(task.title);
     setDescription(task.description);
     setSelectedProjectId(task.projectId);
-    setSelectedMemberId(task.assignedTo ? task.assignedTo.toString() : 'unassigned');
+   setSelectedMemberId(task.assignedTo ?? 'unassigned');
     setPriority(task.priority);
     setStatus(task.status);
     setIsDialogOpen(true);
@@ -322,7 +320,7 @@ const Tasks: React.FC = () => {
                         {member.name} ({member.currentTasks}/{member.capacity})
                       </SelectItem>
                     ))}
-                    
+
                   </SelectContent>
                 </Select>
               </div>
@@ -406,10 +404,10 @@ const Tasks: React.FC = () => {
       <div className="tasks-grid">
         {filteredTasks.map(task => {
           const project = getProjectById(task.projectId);
-         const member = task.assignedTo ? getMemberById(task.assignedTo) : null;
+          const member = task.assignedTo ? getMemberById(task.assignedTo) : null;
 
           return (
-            <div key={task.id} className="task-card">
+            <div key={task._id} className="task-card">
               <div className="task-header">
                 <div className="task-badges">
                   <span className={`priority-badge ${getPriorityClass(task.priority)}`}>
@@ -423,7 +421,7 @@ const Tasks: React.FC = () => {
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(task)}>
                     <Edit size={16} />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(task.id)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(task._id)}>
                     <Trash2 size={16} />
                   </Button>
                 </div>

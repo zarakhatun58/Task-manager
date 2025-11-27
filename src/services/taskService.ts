@@ -11,7 +11,7 @@ export const createTaskAPI = async (task: { title: string; description?: string;
   return res.data;
 };
 
-export const updateTaskAPI = async (taskId: string, updates: Partial<{ title: string; description: string; assignedTo: string; priority: string; status: string,  projectId: string; }>) => {
+export const updateTaskAPI = async (taskId: string, updates: Partial<{ title: string; description: string; assignedTo: string; priority: string; status: string,   }>) => {
   const res = await api.put(`/tasks/${taskId}`, updates);
   return res.data;
 };

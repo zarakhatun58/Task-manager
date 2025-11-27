@@ -1,12 +1,12 @@
 import Task from "../models/taskModel.js";
-import Project from "../models/projectModel.js";
+import TaskProject from "../models/projectModel.js";
 import Team from "../models/teamModel.js";
 import ActivityTask from "../models/activityModel.js";
 import reassignForTeam from "../utils/reassign.js";
 
 // Count tasks per member in a team
 async function countTasksForTeam(teamId) {
-  const projects = await Project.find({ teamId }).select("_id");
+  const projects = await TaskProject.find({ teamId }).select("_id");
   const projectIds = projects.map(p => p._id);
   const tasks = await Task.find({
     projectId: { $in: projectIds },
@@ -29,7 +29,7 @@ export const createTask = async (req, res) => {
     if (!title || !projectId)
       return res.status(400).json({ message: "title and projectId required" });
 
-    const project = await Project.findById(projectId);
+    const project = await TaskProject.findById(projectId);
     if (!project) return res.status(400).json({ message: "Project not found" });
 
     const team = await Team.findById(project.teamId);
@@ -78,8 +78,8 @@ export const getTasks = async (req, res) => {
     if (req.query.priority) filter.priority = req.query.priority;
 
     const tasks = await Task.find(filter)
-      .populate('assignedTo', 'name') // populate only member name
       .sort({ createdAt: -1 });
+
 
     res.json(tasks);
   } catch (err) {
@@ -90,7 +90,8 @@ export const getTasks = async (req, res) => {
 // GET SINGLE TASK
 export const getTask = async (req, res) => {
   try {
-    const task = await Task.findById(req.params.taskId).populate('assignedTo', 'name');
+    const task = await Task.findById(req.params.taskId);
+
     if (!task) return res.status(404).json({ message: "Task not found" });
     res.json(task);
   } catch (err) {
@@ -112,7 +113,7 @@ export const updateTask = async (req, res) => {
       const task = await Task.findById(req.params.taskId);
       if (!task) return res.status(404).json({ message: "Task not found" });
 
-      const project = await Project.findById(task.projectId);
+      const project = await TaskProject.findById(task.projectId);
       if (!project) return res.status(400).json({ message: "Project not found" });
 
       const team = await Team.findById(project.teamId);
@@ -123,13 +124,14 @@ export const updateTask = async (req, res) => {
     }
 
     // Update task
-    await Task.findByIdAndUpdate(req.params.taskId, {
-      ...updates,
-      assignedTo: updates.assignedTo || null
-    });
+    await Task.findByIdAndUpdate(
+      req.params.taskId,
+      { ...updates, assignedTo: updates.assignedTo || null },
+      { new: true }
+    );
 
     // Retrieve updated task with populated assignedTo
-    const updatedTask = await Task.findById(req.params.taskId).populate('assignedTo', 'name');
+    const updatedTask = await Task.findById(req.params.taskId);
 
     await ActivityTask.create({ userId: req.user, message: `Task "${updatedTask.title}" updated.` });
 
@@ -158,7 +160,7 @@ export const autoAssign = async (req, res) => {
     const { projectId } = req.body;
     if (!projectId) return res.status(400).json({ message: "projectId required" });
 
-    const project = await Project.findById(projectId);
+    const project = await TaskProject.findById(projectId);
     if (!project) return res.status(400).json({ message: "Project not found" });
 
     const team = await Team.findById(project.teamId);

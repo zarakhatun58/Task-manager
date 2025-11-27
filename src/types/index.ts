@@ -1,5 +1,5 @@
 export interface User {
-  id: string;
+  _id: string;
   name: string;
   email: string;
   password: string;
@@ -25,7 +25,7 @@ export interface Team {
 
 
 export interface Task {
-  id: string;
+  _id: string;
   title: string;
   description: string;
   projectId: string;

@@ -11,8 +11,13 @@ export const register = async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
 
   const user = await TaskUser.create({ name, email, password: hash });
-  res.json(user);
+
+  // Generate JWT token
+  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+
+  res.json({ token, user });
 };
+
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
